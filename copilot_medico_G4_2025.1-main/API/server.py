@@ -23,6 +23,17 @@ from backend.patient_db import (
 app = Flask(__name__)
 CORS(app)
 
+@app.route('/')
+def home():
+    return jsonify({
+        "status": "success",
+        "message": "Servidor do Co-Pilot Médico está ativo e rodando! 🚀",
+        "endpoints": {
+            "check_patient": "/api/patient-exists/<patient_id>",
+            "all_patients": "/api/all-patients"
+        }
+    }), 200
+
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
 def check_patient_exists_api(patient_id):
