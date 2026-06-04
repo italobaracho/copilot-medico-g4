@@ -3,7 +3,9 @@ import './App.css';
 import Chat from './modules/Chat/chat';
 import { executeArbitraryScriptOnActiveTab, executeScriptOnActiveTab } from './utils/utils'; 
 
-const SERVER_URL = 'https://copilot-medico-g4-production.up.railway.app';
+const SERVER_URL = typeof window !== 'undefined' && window.location.origin.startsWith('chrome-extension://')
+  ? 'https://copilot-medico-g4-production.up.railway.app'
+  : (typeof window !== 'undefined' && window.location.origin.includes('localhost') ? 'http://localhost:3001' : (typeof window !== 'undefined' ? window.location.origin : 'https://copilot-medico-g4-production.up.railway.app'));
 
 // --- Tipos ---
 type Message = {
@@ -23,7 +25,43 @@ type ConsultationListItem = {
   id: string;
   title: string;
   date?: string; 
-  created_at: string;
+};
+
+const isExtension = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
+
+const safeStorage = {
+  get: (keys: string[], callback: (result: Record<string, any>) => void) => {
+    if (isExtension) {
+      chrome.storage.local.get(keys, callback);
+    } else {
+      const result: Record<string, any> = {};
+      keys.forEach(key => {
+        const val = localStorage.getItem(key);
+        if (val) {
+          try {
+            result[key] = JSON.parse(val);
+          } catch {
+            result[key] = val;
+          }
+        }
+      });
+      callback(result);
+    }
+  },
+  set: (items: Record<string, any>, callback?: () => void) => {
+    if (isExtension) {
+      if (callback) {
+        chrome.storage.local.set(items, callback);
+      } else {
+        chrome.storage.local.set(items);
+      }
+    } else {
+      Object.entries(items).forEach(([key, val]) => {
+        localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val));
+      });
+      if (callback) callback();
+    }
+  }
 };
 
 // --- Componente Principal App ---
@@ -49,7 +87,7 @@ function App() {
   // --- Funções de Carregamento e Persistência ---
 
   const loadPatientDataFromStorage = useCallback(() => {
-    chrome.storage.local.get(['patientId', 'patientName', 'consultationId', 'consultationTitle'], (result) => {
+    safeStorage.get(['patientId', 'patientName', 'consultationId', 'consultationTitle'], (result) => {
       if (result.patientId) {
         setPatientId(result.patientId);
         setPatientName(result.patientName || null);
@@ -104,18 +142,20 @@ function App() {
       const response = await fetch(`${SERVER_URL}/api/patients/${pId}/consultations`);
       const data = await response.json();
       if (data.status === 'success') {
-        const sortedConsultations = data.consultations.sort((a: ConsultationListItem, b: ConsultationListItem) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        const sortedConsultations = data.consultations.sort((a: ConsultationListItem, b: ConsultationListItem) => {
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          return dateB - dateA;
+        });
         setPatientConsultations(sortedConsultations);
       } else {
         console.error("Erro ao carregar consultas:", data.message);
     
-        setPatientConsultations([{ id: Date.now().toString(), title: `Erro ao carregar consultas: ${data.message}`, created_at: new Date().toISOString() }]);
+        setPatientConsultations([{ id: Date.now().toString(), title: `Erro ao carregar consultas: ${data.message}`, date: new Date().toISOString() }]);
       }
     } catch (error: any) {
       console.error("Erro na requisição de consultas:", error);
-      setPatientConsultations([{ id: Date.now().toString(), title: `Erro de rede ao carregar consultas: ${error.message}`, created_at: new Date().toISOString() }]);
+      setPatientConsultations([{ id: Date.now().toString(), title: `Erro de rede ao carregar consultas: ${error.message}`, date: new Date().toISOString() }]);
     } finally {
       setIsLoading(false);
     }
@@ -183,11 +223,11 @@ function App() {
         // Atualiza patientId/consultationId se o backend retornar novos (caso de primeira conversa)
         if (data.patient_id && data.patient_id !== patientId) {
           setPatientId(data.patient_id);
-          chrome.storage.local.set({ patientId: data.patient_id });
+          safeStorage.set({ patientId: data.patient_id });
         }
         if (data.consultation_id && data.consultation_id !== consultationId) {
           setConsultationId(data.consultation_id);
-          chrome.storage.local.set({ consultationId: data.consultation_id });
+          safeStorage.set({ consultationId: data.consultation_id });
         }
       } else {
         setMessages((prevMessages) => [...prevMessages, { id: Date.now(), text: `Erro: ${data.message}`, sender: 'bot', timestamp: new Date().toISOString() }]);
@@ -226,11 +266,11 @@ function App() {
 
         if (data.patient_id && data.patient_id !== patientId) {
           setPatientId(data.patient_id);
-          chrome.storage.local.set({ patientId: data.patient_id });
+          safeStorage.set({ patientId: data.patient_id });
         }
         if (data.consultation_id && data.consultation_id !== consultationId) {
           setConsultationId(data.consultation_id);
-          chrome.storage.local.set({ consultationId: data.consultation_id });
+          safeStorage.set({ consultationId: data.consultation_id });
         }
       } else {
         setMessages((prevMessages) => [...prevMessages, { id: Date.now(), text: `Erro ao processar PDF: ${data.message}`, sender: 'bot', timestamp: new Date().toISOString() }]);
@@ -262,7 +302,7 @@ function App() {
         const newPName = data.patient_name;
         const newCId = data.first_consultation_id; 
 
-        chrome.storage.local.set({ patientId: newPId, patientName: newPName, consultationId: newCId, consultationTitle: "Primeira Consulta" }, () => {
+        safeStorage.set({ patientId: newPId, patientName: newPName, consultationId: newCId, consultationTitle: "Primeira Consulta" }, () => {
           console.log("Setting patientId to:", newPId, "and consultationId to:", newCId);
           setPatientId(newPId);
           setPatientName(newPName);
@@ -294,9 +334,11 @@ function App() {
       let selectedConsultationTitleToLoad: string | null = null;
 
       if (consultationsData.status === 'success' && consultationsData.consultations.length > 0) {
-        const sortedConsults = consultationsData.consultations.sort((a: ConsultationListItem, b: ConsultationListItem) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        const sortedConsults = consultationsData.consultations.sort((a: ConsultationListItem, b: ConsultationListItem) => {
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          return dateB - dateA;
+        });
         selectedConsultationToLoad = sortedConsults[0].id;
         selectedConsultationTitleToLoad = sortedConsults[0].title;
       } else {
@@ -315,7 +357,7 @@ function App() {
       }
 
       if (selectedConsultationToLoad) {
-        chrome.storage.local.set({ patientId: pId, patientName: pName, consultationId: selectedConsultationToLoad, consultationTitle: selectedConsultationTitleToLoad }, () => {
+        safeStorage.set({ patientId: pId, patientName: pName, consultationId: selectedConsultationToLoad, consultationTitle: selectedConsultationTitleToLoad }, () => {
           setPatientId(pId);
           setPatientName(pName);
           setConsultationId(selectedConsultationToLoad);
@@ -341,7 +383,7 @@ function App() {
       return;
     }
     setIsLoading(true);
-    chrome.storage.local.set({ consultationId: cId, consultationTitle: cTitle }, () => {
+    safeStorage.set({ consultationId: cId, consultationTitle: cTitle }, () => {
       setConsultationId(cId);
       setConsultationTitle(cTitle);
       loadConsultationHistory(patientId, cId);
@@ -376,7 +418,8 @@ function App() {
         const newConsultId = data.consultation_id;
         const newConsultTitle = data.consultation_title;
 
-        chrome.storage.local.set({ consultationId: newConsultId, consultationTitle: newConsultTitle, patientId: patientId }, () => {
+        safeStorage.set({ consultationId: newConsultId, consultationTitle: newConsultTitle, patientId: patientId }, () => {
+          setPatientId(patientId);
           setConsultationId(newConsultId);
           setConsultationTitle(newConsultTitle);
           loadConsultationHistory(patientId, newConsultId); 
@@ -511,24 +554,26 @@ function App() {
     <div className="App">
       <header className="App-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px' }}>
         <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Assistente Médico AI</h1>
-        <button 
-          onClick={handleOpenInNewTab} 
-          style={{ 
-            background: '#007bff', 
-            border: 'none', 
-            borderRadius: '4px',
-            color: 'white',
-            cursor: 'pointer', 
-            fontSize: '0.85rem',
-            padding: '6px 12px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '5px'
-          }} 
-          title="Abrir em Nova Aba"
-        >
-          Expandir ↗️
-        </button>
+        {isExtension && (
+          <button 
+            onClick={handleOpenInNewTab} 
+            style={{ 
+              background: '#007bff', 
+              border: 'none', 
+              borderRadius: '4px',
+              color: 'white',
+              cursor: 'pointer', 
+              fontSize: '0.85rem',
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px'
+            }} 
+            title="Abrir em Nova Aba"
+          >
+            Expandir ↗️
+          </button>
+        )}
       </header>
 
       {/* Sidebar */}
@@ -665,9 +710,11 @@ function App() {
           </div>
         )}
         {/* Botão de Extrair Dados da Página (mantido no App.tsx por ser uma funcionalidade "global") */}
-        <button onClick={handleExtractAndSend} disabled={isLoading || !patientId || !consultationId} style={{ marginTop: '10px', padding: '10px', width: '100%' }}>
-            Extrair Dados da Página
-        </button>
+        {isExtension && (
+          <button onClick={handleExtractAndSend} disabled={isLoading || !patientId || !consultationId} style={{ marginTop: '10px', padding: '10px', width: '100%' }}>
+              Extrair Dados da Página
+          </button>
+        )}
       </div>
 
       {/* Modal para Criar Novo Paciente */}
@@ -736,7 +783,7 @@ function App() {
                       <label htmlFor={`consultation-${consultation.id}`} style={{ flexGrow: 1, cursor: 'pointer' }}>
                         <strong>{consultation.title}</strong>
                         <br />
-                        <small>ID: {consultation.id.substring(0, 8)}... - Criada em: {new Date(consultation.created_at).toLocaleDateString('pt-BR')}</small>
+                        <small>ID: {consultation.id.substring(0, 8)}... - Criada em: {consultation.date ? new Date(consultation.date).toLocaleDateString('pt-BR') : 'Sem data'}</small>
                       </label>
                     </div>
                   )

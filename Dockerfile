@@ -21,6 +21,9 @@ RUN python -m spacy download pt_core_news_lg
 # Copiar o restante dos arquivos do backend
 COPY copilot_medico_G4_2025.1-main/API /app/
 
+# Copiar a pasta compilada do frontend para o container servir
+COPY copilot_medico_G4_2025.1-main/front/copmed-extension/dist /app/dist
+
 # Expor a porta que a API utiliza
 EXPOSE 3001
 

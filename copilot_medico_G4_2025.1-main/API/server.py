@@ -20,19 +20,23 @@ from backend.patient_db import (
     get_consultation_chat_history, add_message_to_consultation_history
 )
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='dist', static_url_path='')
 CORS(app)
 
 @app.route('/')
 def home():
-    return jsonify({
-        "status": "success",
-        "message": "Servidor do Co-Pilot Médico está ativo e rodando! 🚀",
-        "endpoints": {
-            "check_patient": "/api/patient-exists/<patient_id>",
-            "all_patients": "/api/all-patients"
-        }
-    }), 200
+    try:
+        return app.send_static_file('index.html')
+    except Exception as e:
+        return jsonify({
+            "status": "success",
+            "message": "Servidor do Co-Pilot Médico está ativo e rodando! 🚀 (Frontend não compilado ou ausente)",
+            "error": str(e),
+            "endpoints": {
+                "check_patient": "/api/patient-exists/<patient_id>",
+                "all_patients": "/api/all-patients"
+            }
+        }), 200
 
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
