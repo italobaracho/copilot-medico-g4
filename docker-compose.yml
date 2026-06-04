@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: ./copilot_medico_G4_2025.1-main/API/Dockerfile
+    container_name: copilot_medico_backend
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      # Monta o diretório API para persistir o banco de dados local (patients_db.json) no host
+      - ./copilot_medico_G4_2025.1-main/API:/app
+      # Evita sincronizar arquivos temporários de compilação do python
+      - /app/__pycache__
+      - /app/backend/__pycache__
+    restart: unless-stopped
+
+  frontend-builder:
+    image: node:18-alpine
+    container_name: copilot_medico_frontend_builder
+    working_dir: /app
+    volumes:
+      - ./copilot_medico_G4_2025.1-main/front/copmed-extension:/app
+    # Instala dependências do node e executa o build da extensão gerando a pasta 'dist' na máquina física
+    command: sh -c "npm install && npm run build"

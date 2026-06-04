@@ -1,0 +1,33 @@
+{
+    "manifest_version": 3,
+    "version": "1.0.0",
+    "name": "Copmed Extension",
+    "action": {
+        "default_popup": "index.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "permissions": [
+        "scripting",
+        "activeTab",
+        "storage"
+   
+    ],
+    "host_permissions": [ 
+        "http://localhost:3001/*" 
+    
+    ],
+    "icons": {
+        "32": "copilot-icon.png",
+        "48": "CopMed_LogoBig.png",
+        "128": "CopMed_LogoBig.png"
+    },
+    "content_scripts": [
+        {
+        "matches": ["<all_urls>"],
+        "js": ["content.js"],
+        "all_frames": true
+        }
+    ]
+}
