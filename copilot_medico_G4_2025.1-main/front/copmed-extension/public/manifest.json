@@ -15,7 +15,7 @@
    
     ],
     "host_permissions": [ 
-        "http://localhost:3001/*" 
+        "https://copilot-medico-g4-production.up.railway.app/*" 
     
     ],
     "icons": {

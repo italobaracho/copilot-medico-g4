@@ -3,7 +3,7 @@ import './App.css';
 import Chat from './modules/Chat/chat';
 import { executeArbitraryScriptOnActiveTab, executeScriptOnActiveTab } from './utils/utils'; 
 
-const SERVER_URL = 'http://localhost:3001';
+const SERVER_URL = 'https://copilot-medico-g4-production.up.railway.app';
 
 // --- Tipos ---
 type Message = {

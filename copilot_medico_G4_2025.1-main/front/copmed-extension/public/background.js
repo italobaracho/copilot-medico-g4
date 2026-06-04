@@ -16,7 +16,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
       console.log('Enviando dados para o servidor Python:', payload);
 
-      fetch('http://localhost:3001/api/extracted-data', {
+      fetch('https://copilot-medico-g4-production.up.railway.app/api/extracted-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
